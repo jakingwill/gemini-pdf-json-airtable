@@ -95,8 +95,10 @@ def process_assessment():
 
         record_id = data.get('recordId')
         pdf_url = data.get('pdfUrl')
+        print(f"PDF URL: {pdf_url}")  # Log the PDF URL
 
         if not record_id or not pdf_url:
+            print("Missing recordId or pdfUrl")
             return jsonify({"success": False, "error": "Missing recordId or pdfUrl"}), 400
 
         model = configure_model()
@@ -109,6 +111,7 @@ def process_assessment():
         # Extract text from the downloaded PDF
         extracted_text = extract_pdf_text(str(pdf_path))
         if not extracted_text:
+            print("No text extracted from the PDF")
             return jsonify({"success": False, "error": "No text extracted from the PDF"}), 400
 
         print("Extracted text from PDF:")

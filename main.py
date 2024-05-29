@@ -6,6 +6,8 @@ from pathlib import Path
 import json
 from flask import Flask, request, jsonify
 
+app = Flask(__name__)
+
 # Load Google API key from environment variable (more secure)
 GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
 AIRTABLE_WEBHOOK_URL = os.environ.get('AIRTABLE_WEBHOOK_URL')  # Set your Airtable webhook URL here
@@ -55,12 +57,12 @@ def configure_model():
         "in the document.\n- Generate null for missing entities.\n- Return the output in JSON format."
     )
 
-    return genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
-        generation_config=generation_config,
-        safety_settings=safety_settings,
-        system_instruction=system_instruction
-    )
+    model = genai.GenerativeModel(model_name="models/gemini-1.5-flash")
+    model.generation_config = generation_config
+    model.safety_settings = safety_settings
+    model.system_instruction = system_instruction
+
+    return model
 
 def download_pdf(pdf_url, output_path):
     response = requests.get(pdf_url)
@@ -82,65 +84,66 @@ def extract_pdf_text(filepath):
     except FileNotFoundError:
         print(f"Error: PDF file not found: {filepath}")
         return ""
-
-app = Flask(__name__)
+    except Exception as e:
+        print(f"Error extracting text from PDF: {e}")
+        return ""
 
 @app.route('/process-assessment', methods=['POST'])
 def process_assessment():
-    data = request.json
-    record_id = data.get('recordId')
-    pdf_url = data.get('pdfUrl')
+    try:
+        data = request.json
+        record_id = data.get('recordId')
+        pdf_url = data.get('pdfUrl')
 
-    if not record_id or not pdf_url:
-        return jsonify({"success": False, "error": "Missing recordId or pdfUrl"}), 400
+        if not record_id or not pdf_url:
+            return jsonify({"success": False, "error": "Missing recordId or pdfUrl"}), 400
 
-    model = configure_model()
+        model = configure_model()
 
-    pdf_path = Path("/tmp/assessment.pdf")  # Temporary path to save the downloaded PDF
+        pdf_path = Path("/tmp/assessment.pdf")  # Temporary path to save the downloaded PDF
 
-    # Download the PDF from the provided URL
-    download_pdf(pdf_url, pdf_path)
+        # Download the PDF from the provided URL
+        download_pdf(pdf_url, pdf_path)
 
-    # Extract text from the downloaded PDF
-    extracted_text = extract_pdf_text(str(pdf_path))
-    if not extracted_text:
-        return jsonify({"success": False, "error": "No text extracted from the PDF"}), 400
+        # Extract text from the downloaded PDF
+        extracted_text = extract_pdf_text(str(pdf_path))
+        if not extracted_text:
+            return jsonify({"success": False, "error": "No text extracted from the PDF"}), 400
 
-    print("Extracted text from PDF:")
-    print(extracted_text)
+        print("Extracted text from PDF:")
+        print(extracted_text)
 
-    user_input = {
-        "role": "user",
-        "parts": [extracted_text]
-    }
-
-    convo = model.start_chat(history=[
-        {
-            "role": "model",
-            "parts": ["[\n  {\n    \"question number\": \"3.1\",\n    \"question\": \"Based on your Term 3 documentary that you submitted, answer the following questions:\\nTitle of Documentary\",\n    \"marks for question\": \"8\",\n    \"student answer\": \"Liverpool and manchester united rivalry\"\n  },\n  {\n    \"question number\": \"3.1.1\",\n    \"question\": \"Provide a definition of B-Roll footage\",\n    \"marks for question\": \"1\",\n    \"student answer\": \"Footage taken from other videos from youtube, tiktok, and other streaming platforms.\"\n  },\n  {\n    \"question number\": \"3.1.2\",\n    \"question\": \"Give TWO clear examples where you used B-Roll footage in your documentary\",\n    \"marks for question\": \"2\",\n    \"student answer\": \"Liverpool lifting the champions league after winning, The footage of the fans\"\n  },\n  {\n    \"question number\": \"3.1.3\",\n    \"question\": \"What was the overall tone of your documentary? (e.g. serious, humorous, critical)\",\n    \"marks for question\": \"2\",\n    \"student answer\": null, \"role\": \"user\"\n  }\n]"]
+        user_input = {
+            "role": "user",
+            "parts": [extracted_text]
         }
-    ])
 
-    # Only send a message if the extracted text is not empty
-    if extracted_text.strip():
-        response = convo.send_message(user_input['parts'][0])
-        print("Model response:")
-        print(response.text)
-        # Parse the response as JSON
-        response_json = json.loads(response.text)
-        print("Parsed JSON response:")
-        print(json.dumps(response_json, indent=2))
-        # Send the JSON response to Airtable webhook
-        webhook_response = requests.post(AIRTABLE_WEBHOOK_URL, json=response_json)
-        if webhook_response.status_code == 200:
-            print("JSON response sent to Airtable webhook successfully")
-            return jsonify({"success": True}), 200
-        else:
-            print(f"Error sending JSON response to Airtable webhook: {webhook_response.status_code} - {webhook_response.text}")
-            return jsonify({"success": False, "error": webhook_response.text}), 500
-    else:
-        return jsonify({"success": False, "error": "Extracted text is empty"}), 400
+        convo = model.start_chat(history=[
+            {
+                "role": "model",
+                "parts": ["[\n  {\n    \"question number\": \"3.1\",\n    \"question\": \"Based on your Term 3 documentary that you submitted, answer the following questions:\\nTitle of Documentary\",\n    \"marks for question\": \"8\",\n    \"student answer\": \"Liverpool and manchester united rivalry\"\n  },\n  {\n    \"question number\": \"3.1.1\",\n    \"question\": \"Provide a definition of B-Roll footage\",\n    \"marks for question\": \"1\",\n    \"student answer\": \"Footage taken from other videos from youtube, tiktok, and other streaming platforms.\"\n  },\n  {\n    \"question number\": \"3.1.2\",\n    \"question\": \"Give TWO clear examples where you used B-Roll footage in your documentary\",\n    \"marks for question\": \"2\",\n    \"student answer\": \"Liverpool lifting the champions league after winning, The footage of the fans\"\n  },\n  {\n    \"question number\": \"3.1.3\",\n    \"question\": \"What was the overall tone of your documentary? (e.g. serious, humorous, critical)\",\n    \"marks for question\": \"2\",\n    \"student answer\": null, \"role\": \"user\"\n  }\n]"]
+            }
+        ])
+
+        # Only send a message if the extracted text is not empty
+        if extracted_text.strip():
+            response = convo.send_message(user_input['parts'][0])
+            print("Model response:")
+            print(response.text)
+            response_json = response.json()
+
+            # Send response to Airtable webhook
+            webhook_response = requests.post(AIRTABLE_WEBHOOK_URL, json=response_json)
+            if webhook_response.status_code != 200:
+                print(f"Error sending data to Airtable webhook: {webhook_response.text}")
+                return jsonify({"success": False, "error": "Failed to send data to Airtable webhook"}), 500
+
+        return jsonify({"success": True, "message": "PDF processed and data sent to Airtable webhook"}), 200
+
+    except Exception as e:
+        print(f"Error processing assessment: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 10000))
+    port = int(os.environ.get('PORT', 10000))  # Updated to match your port setting
     app.run(host='0.0.0.0', port=port)

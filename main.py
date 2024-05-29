@@ -3,7 +3,6 @@ import requests
 import fitz  # PyMuPDF
 import google.generativeai as genai
 from pathlib import Path
-import json
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
@@ -92,6 +91,8 @@ def extract_pdf_text(filepath):
 def process_assessment():
     try:
         data = request.json
+        print(f"Received data: {data}")  # Log the received data
+
         record_id = data.get('recordId')
         pdf_url = data.get('pdfUrl')
 

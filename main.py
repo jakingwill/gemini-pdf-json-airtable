@@ -106,7 +106,9 @@ def process_assessment():
         pdf_path = Path("/tmp/assessment.pdf")  # Temporary path to save the downloaded PDF
 
         # Download the PDF from the provided URL
+        print(f"Downloading PDF from {pdf_url}")
         download_pdf(pdf_url, pdf_path)
+        print("Download complete")
 
         # Extract text from the downloaded PDF
         extracted_text = extract_pdf_text(str(pdf_path))

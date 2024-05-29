@@ -4,6 +4,7 @@ import fitz  # PyMuPDF
 import google.generativeai as genai
 from pathlib import Path
 import json
+from flask import Flask, request, jsonify
 
 # Load Google API key from environment variable (more secure)
 GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
@@ -82,14 +83,16 @@ def extract_pdf_text(filepath):
         print(f"Error: PDF file not found: {filepath}")
         return ""
 
-def main():
-    import sys
-    import json
+app = Flask(__name__)
 
-    # Fetch the input data from the POST request
-    input_data = json.loads(sys.stdin.read())
-    record_id = input_data['recordId']
-    pdf_url = input_data['pdfUrl']
+@app.route('/process-assessment', methods=['POST'])
+def process_assessment():
+    data = request.json
+    record_id = data.get('recordId')
+    pdf_url = data.get('pdfUrl')
+
+    if not record_id or not pdf_url:
+        return jsonify({"success": False, "error": "Missing recordId or pdfUrl"}), 400
 
     model = configure_model()
 
@@ -101,8 +104,7 @@ def main():
     # Extract text from the downloaded PDF
     extracted_text = extract_pdf_text(str(pdf_path))
     if not extracted_text:
-        print("No text extracted from the PDF.")
-        return
+        return jsonify({"success": False, "error": "No text extracted from the PDF"}), 400
 
     print("Extracted text from PDF:")
     print(extracted_text)
@@ -132,10 +134,12 @@ def main():
         webhook_response = requests.post(AIRTABLE_WEBHOOK_URL, json=response_json)
         if webhook_response.status_code == 200:
             print("JSON response sent to Airtable webhook successfully")
+            return jsonify({"success": True}), 200
         else:
             print(f"Error sending JSON response to Airtable webhook: {webhook_response.status_code} - {webhook_response.text}")
+            return jsonify({"success": False, "error": webhook_response.text}), 500
     else:
-        print("Extracted text is empty, skipping model call.")
+        return jsonify({"success": False, "error": "Extracted text is empty"}), 400
 
 if __name__ == "__main__":
-    main()
+    app.run(host='0.0.0.0', port=8000)

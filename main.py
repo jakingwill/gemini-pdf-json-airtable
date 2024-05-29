@@ -75,6 +75,7 @@ def extract_pdf_text(filepath):
         for page_num in range(len(doc)):
             page = doc.load_page(page_num)
             page_text = page.get_text()
+            print(f"Page {page_num + 1} text length: {len(page_text)}")  # Log the length of text extracted from each page
             if page_text.strip():  # Check if the page text is not empty
                 print(f"Extracted text from page {page_num + 1}:")
                 print(page_text)
